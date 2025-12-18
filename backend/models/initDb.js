@@ -3,23 +3,13 @@ const bcrypt = require('bcrypt');
 
 const initializeDatabase = async () => {
   const client = await pool.connect();
+
   try {
     await client.query('BEGIN');
 
+    // USERS
     await client.query(`
-      DROP TABLE IF EXISTS waitlist CASCADE;
-      DROP TABLE IF EXISTS booking_coaches CASCADE;
-      DROP TABLE IF EXISTS booking_equipment CASCADE;
-      DROP TABLE IF EXISTS bookings CASCADE;
-      DROP TABLE IF EXISTS pricing_rules CASCADE;
-      DROP TABLE IF EXISTS coaches CASCADE;
-      DROP TABLE IF EXISTS equipment CASCADE;
-      DROP TABLE IF EXISTS courts CASCADE;
-      DROP TABLE IF EXISTS users CASCADE;
-    `);
-
-    await client.query(`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -29,8 +19,9 @@ const initializeDatabase = async () => {
       )
     `);
 
+    // COURTS
     await client.query(`
-      CREATE TABLE courts (
+      CREATE TABLE IF NOT EXISTS courts (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         court_type VARCHAR(50) NOT NULL,
@@ -40,8 +31,9 @@ const initializeDatabase = async () => {
       )
     `);
 
+    // EQUIPMENT
     await client.query(`
-      CREATE TABLE equipment (
+      CREATE TABLE IF NOT EXISTS equipment (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         total_quantity INTEGER NOT NULL,
@@ -51,8 +43,9 @@ const initializeDatabase = async () => {
       )
     `);
 
+    // COACHES
     await client.query(`
-      CREATE TABLE coaches (
+      CREATE TABLE IF NOT EXISTS coaches (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         specialization VARCHAR(100),
@@ -62,8 +55,9 @@ const initializeDatabase = async () => {
       )
     `);
 
+    // PRICING RULES
     await client.query(`
-      CREATE TABLE pricing_rules (
+      CREATE TABLE IF NOT EXISTS pricing_rules (
         id SERIAL PRIMARY KEY,
         rule_name VARCHAR(100) NOT NULL,
         rule_type VARCHAR(50) NOT NULL,
@@ -76,8 +70,9 @@ const initializeDatabase = async () => {
       )
     `);
 
+    // BOOKINGS
     await client.query(`
-      CREATE TABLE bookings (
+      CREATE TABLE IF NOT EXISTS bookings (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
         court_id INTEGER REFERENCES courts(id),
@@ -92,77 +87,25 @@ const initializeDatabase = async () => {
       )
     `);
 
-    await client.query(`
-      CREATE TABLE booking_equipment (
-        id SERIAL PRIMARY KEY,
-        booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-        equipment_id INTEGER REFERENCES equipment(id),
-        quantity INTEGER DEFAULT 1
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE booking_coaches (
-        id SERIAL PRIMARY KEY,
-        booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-        coach_id INTEGER REFERENCES coaches(id)
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE waitlist (
-        id SERIAL PRIMARY KEY,
-        court_id INTEGER REFERENCES courts(id),
-        booking_date DATE NOT NULL,
-        start_time TIME NOT NULL,
-        user_name VARCHAR(100) NOT NULL,
-        user_email VARCHAR(100) NOT NULL,
-        notified BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    await client.query(
-      'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)',
-      ['admin', 'admin@courtbook.com', hashedPassword, 'admin']
+    // ADMIN USER (only if not exists)
+    const adminCheck = await client.query(
+      "SELECT id FROM users WHERE username = 'admin'"
     );
 
-    await client.query(`
-      INSERT INTO courts (name, court_type, base_price) VALUES
-      ('Indoor Court 1', 'indoor', 500),
-      ('Indoor Court 2', 'indoor', 500),
-      ('Outdoor Court 1', 'outdoor', 300),
-      ('Outdoor Court 2', 'outdoor', 300)
-    `);
-
-    await client.query(`
-      INSERT INTO equipment (name, total_quantity, available_quantity, rental_price) VALUES
-      ('Badminton Racket', 10, 10, 50),
-      ('Sports Shoes', 8, 8, 30),
-      ('Shuttlecock Set', 15, 15, 20)
-    `);
-
-    await client.query(`
-      INSERT INTO coaches (name, specialization, hourly_rate) VALUES
-      ('Coach Rajesh', 'Singles Specialist', 800),
-      ('Coach Priya', 'Doubles Expert', 750),
-      ('Coach Anil', 'Beginner Training', 600)
-    `);
-
-    await client.query(`
-      INSERT INTO pricing_rules (rule_name, rule_type, multiplier_type, multiplier_value, conditions) VALUES
-      ('Peak Hours Premium', 'time_based', 'percentage', 50, '{"start_time": "18:00", "end_time": "21:00"}'),
-      ('Weekend Surcharge', 'day_based', 'percentage', 30, '{"days": [0, 6]}'),
-      ('Indoor Court Premium', 'court_based', 'percentage', 20, '{"court_types": ["indoor"]}'),
-      ('Early Bird Discount', 'time_based', 'percentage', -10, '{"start_time": "06:00", "end_time": "09:00"}')
-    `);
+    if (adminCheck.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      await client.query(
+        'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)',
+        ['admin', 'admin@courtbook.com', hashedPassword, 'admin']
+      );
+    }
 
     await client.query('COMMIT');
-    console.log('Database initialized successfully');
+    console.log('Database initialized safely');
+
   } catch (err) {
     await client.query('ROLLBACK');
-    throw err;
+    console.error('DB init error:', err.message);
   } finally {
     client.release();
   }

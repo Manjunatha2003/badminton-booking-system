@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
 
 const { initializeDatabase } = require('./models/initDb');
+
 const authRoutes = require('./routes/authRoutes');
 const courtRoutes = require('./routes/courtRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
@@ -31,11 +33,15 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// 🚀 SAFE INIT (NO CRASH)
+initializeDatabase()
+  .then(() => {
+    console.log('Database ready');
+  })
+  .catch(err => {
+    console.error('Database init failed:', err.message);
   });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
